@@ -2,8 +2,10 @@ name: Claude Runner (Reusable)
 
 on:
   workflow_call:
-    # Callers use `secrets: inherit` to pass all secrets.
-    # The reusable workflow references them by original name.
+    secrets:
+      ANTHROPIC_API_KEY:
+        description: Anthropic API key for Claude Code
+        required: true
 
 jobs:
   notify-unauthorized:
