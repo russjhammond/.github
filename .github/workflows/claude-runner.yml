@@ -1,0 +1,116 @@
+name: Claude Runner (Reusable)
+
+on:
+  workflow_call:
+    secrets:
+      anthropic_api_key:
+        description: Anthropic API key for Claude Code
+        required: true
+
+jobs:
+  notify-unauthorized:
+    if: |
+      github.actor != 'russjhammond' &&
+      (
+        (github.event_name == 'issues' && (github.event.label.name == 'claude-haiku' || github.event.label.name == 'claude-sonnet' || github.event.label.name == 'claude-opus')) ||
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') && !github.event.comment.performed_via_github_app) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Post unauthorized notice
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = context.issue?.number || context.payload.pull_request?.number;
+            if (issueNumber) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `👋 @${context.actor} — The Claude auto-implement runner is currently restricted to @russjhammond only. If you need Claude to work on this, please ask Russ to trigger it.`
+              });
+            }
+
+  claude:
+    if: |
+      github.actor == 'russjhammond' &&
+      (
+        (github.event_name == 'issues' && (github.event.label.name == 'claude-haiku' || github.event.label.name == 'claude-sonnet' || github.event.label.name == 'claude-opus')) ||
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') && !github.event.comment.performed_via_github_app) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
+      )
+    runs-on: [self-hosted, claude]
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - name: Detect model from labels
+        id: model
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let labels = [];
+            if (context.payload.issue) {
+              labels = context.payload.issue.labels.map(l => l.name);
+            } else if (context.payload.pull_request) {
+              labels = context.payload.pull_request.labels.map(l => l.name);
+            }
+            if (labels.includes('claude-opus')) {
+              core.setOutput('name', 'claude-opus-4-6');
+            } else if (labels.includes('claude-sonnet')) {
+              core.setOutput('name', 'claude-sonnet-4-6');
+            } else {
+              core.setOutput('name', 'claude-haiku-4-5-20251001');
+            }
+            core.info(`Selected model: ${labels.includes('claude-opus') ? 'opus' : labels.includes('claude-sonnet') ? 'sonnet' : 'haiku'}`);
+
+      - name: Build prompt for label triggers
+        id: prompt
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || 'No description provided.';
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              per_page: 20,
+            });
+            let prompt = `GitHub Issue #${issue.number}: ${issue.title}\n\n${body}`;
+            const humanComments = comments.data.filter(c => !c.performed_via_github_app);
+            if (humanComments.length > 0) {
+              prompt += '\n\n---\nComments:\n';
+              for (const c of humanComments) {
+                prompt += `\n@${c.user.login}:\n${c.body}\n`;
+              }
+            }
+            core.setOutput('text', prompt);
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.anthropic_api_key }}
+          trigger_phrase: "@claude"
+          prompt: ${{ github.event_name == 'issues' && steps.prompt.outputs.text || '' }}
+          claude_args: |
+            --model ${{ steps.model.outputs.name }}
+            --max-turns 25
+            --allowed-tools "Bash(*)" "WebSearch" "mcp__slack__*" "mcp__github__*" "mcp__supabase__*" "mcp__digitalocean__*" "mcp__google-search-console__*" "mcp__google-analytics__*" "mcp__bing-webmaster__*" "mcp__wordpress-staging__*" "mcp__mailchimp__*" "mcp__iterable__*"
+            --disallowed-tools "WebFetch"
