@@ -29,8 +29,7 @@ concurrency:
 jobs:
   claude-runner:
     uses: russjhammond/.github/.github/workflows/claude-runner.yml@main
-    secrets:
-      anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    secrets: inherit
     permissions:
       contents: write
       pull-requests: write
@@ -40,6 +39,8 @@ jobs:
 ```
 
 **Requirements:**
-- `ANTHROPIC_API_KEY` org secret
+- `ANTHROPIC_API_KEY` org secret (visibility: all repos)
 - Self-hosted runner with `[self-hosted, claude]` labels
 - Model picker labels: `claude-haiku`, `claude-sonnet`, `claude-opus`
+
+**Note:** Callers use `secrets: inherit` (not explicit secret mapping) for cross-org compatibility.
