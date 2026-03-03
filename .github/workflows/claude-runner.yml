@@ -12,7 +12,7 @@ jobs:
     if: |
       github.actor != 'russjhammond' &&
       (
-        (github.event_name == 'issues' && (github.event.label.name == 'claude-haiku' || github.event.label.name == 'claude-sonnet' || github.event.label.name == 'claude-opus')) ||
+        (github.event_name == 'issues' && github.event.label.name == 'claude-opus-4.6') ||
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') && !github.event.comment.performed_via_github_app) ||
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
         (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
@@ -40,7 +40,7 @@ jobs:
     if: |
       github.actor == 'russjhammond' &&
       (
-        (github.event_name == 'issues' && (github.event.label.name == 'claude-haiku' || github.event.label.name == 'claude-sonnet' || github.event.label.name == 'claude-opus')) ||
+        (github.event_name == 'issues' && github.event.label.name == 'claude-opus-4.6') ||
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') && !github.event.comment.performed_via_github_app) ||
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
         (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
@@ -54,25 +54,9 @@ jobs:
       id-token: write
       actions: read
     steps:
-      - name: Detect model from labels
+      - name: Set model
         id: model
-        uses: actions/github-script@v7
-        with:
-          script: |
-            let labels = [];
-            if (context.payload.issue) {
-              labels = context.payload.issue.labels.map(l => l.name);
-            } else if (context.payload.pull_request) {
-              labels = context.payload.pull_request.labels.map(l => l.name);
-            }
-            if (labels.includes('claude-opus')) {
-              core.setOutput('name', 'claude-opus-4-6');
-            } else if (labels.includes('claude-sonnet')) {
-              core.setOutput('name', 'claude-sonnet-4-6');
-            } else {
-              core.setOutput('name', 'claude-haiku-4-5-20251001');
-            }
-            core.info(`Selected model: ${labels.includes('claude-opus') ? 'opus' : labels.includes('claude-sonnet') ? 'sonnet' : 'haiku'}`);
+        run: echo "name=claude-opus-4-6" >> "$GITHUB_OUTPUT"
 
       - name: Build prompt for label triggers
         id: prompt
